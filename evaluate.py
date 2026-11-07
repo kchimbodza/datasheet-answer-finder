@@ -27,7 +27,7 @@ def score_question(q, check_answers=False):
     if check_answers:
         from ask import ask
 
-        result = ask(q["question"], K)
+        result = ask(q["question"], K, log=False)  # keep test runs out of the usage log
         correct = q["answer_contains"].lower() in result["answer"].lower()
         row["answer"] = result["answer"]
         row["good answer"] = correct and result["source"] is not None
