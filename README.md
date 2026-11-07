@@ -54,22 +54,65 @@ The PDFs are not committed because they belong to their manufacturers. Download 
 
 ## How it works
 
-- `ingest.py` reads each PDF page with pypdf and splits it into chunks of about 800 characters
-  (whole lines only). Each chunk keeps its file name and page number. The file name is also put in
-  front of the chunk text before embedding, so a spec table that never names the product is still
-  linked to it. `nomic-embed-text` (through Ollama) turns each chunk into a vector, and the
-  vectors are stored in a local Chroma collection.
-- `search.py` embeds the question the same way and asks Chroma for the 3 nearest chunks
-  (cosine distance).
-- `ask.py` sends those chunks to `llama3.2` and requires a JSON reply with an answer and a
-  word-for-word quote. It then checks that the quote really appears in one of the retrieved
-  chunks (ignoring case and spacing). If it doesn't, the answer is marked **NOT VERIFIED**.
-- `app.py` is a small Streamlit page with two tabs: one to ask a question (answer, verified
-  quote, retrieved chunks) and one to run the evaluation and show the scores per question.
-- `evaluate.py` runs the 15 questions in `questions.json`. Each has the page(s) where the answer
-  is printed and a short expected answer. It reports how often a chunk from a right page is the
-  top result (hit@1) or in the top 3 (hit@3). With `--answers` it also counts answers that
-  contain the expected text **and** pass the quote check.
+The tool has two halves. First it builds a searchable index of the datasheets once. Then, for
+every question, it finds the most relevant text and asks a local LLM to answer from that text
+only, with a quote I can check.
+
+**1. Building the index (`ingest.py`)**
+
+I read every PDF in `data/` page by page with pypdf. A whole datasheet page often covers several
+topics (a power table, some notes, part of the next section), so I cut each page into smaller
+chunks of about 800 characters, always breaking between lines. Each chunk remembers which file
+and page it came from, because the page number is what the user sees as the source and what the
+evaluation checks.
+
+Next I turn each chunk into an **embedding**: a list of numbers that represents what the text is
+about, so texts with similar meaning end up with similar numbers. I use the free
+`nomic-embed-text` model running locally in Ollama. Before embedding, I add the file name to the
+front of the chunk. Spec tables often never mention the product name, so this links them to the
+right product. Everything is stored in Chroma, a vector database that saves to the `chroma_db/`
+folder.
+
+**2. Finding the right text (`search.py`)**
+
+When a question comes in, I embed it with the same model and ask Chroma for the 3 chunks whose
+embeddings are closest to it. "Closest" is measured with cosine distance: 0 means pointing in the
+same direction (very similar), and bigger numbers mean less similar. The embedding model expects
+a small label in front of the text, `search_document:` for stored chunks and `search_query:` for
+questions, so I add those.
+
+**3. Answering with a quote I can check (`ask.py`)**
+
+I send those 3 chunks and the question to `llama3.2`, also running locally in Ollama. The prompt
+says to answer only from those chunks and to reply in JSON with an answer, a sentence copied word
+for word as the quote, and where it came from. If the answer isn't there, it should say
+"not found".
+
+LLMs can make things up, so I don't trust the quote just because the model gave one. My
+**excerpt check** looks for the quote inside the chunks that were actually retrieved (ignoring
+upper/lower case and extra spaces). If it's there, the answer is shown as verified with its file
+and page. If not, it's marked **NOT VERIFIED**. This catches invented or reworded quotes. It
+can't tell whether a real quote actually answers the question; the failures below show this.
+
+**4. Measuring it (`evaluate.py` and `questions.json`)**
+
+I wrote 15 test questions. For each one I looked up which page(s) of the datasheet print the
+answer, plus a short piece of text the right answer must contain (for example "240" for 240 mA).
+The script asks every question and counts:
+
+- **hit@1**: the top chunk came from a right page.
+- **hit@3**: a chunk from a right page was anywhere in the top 3.
+- **good answer** (with `--answers`): the LLM's answer contains the expected text **and** its
+  quote passed the excerpt check.
+
+This turns "does it work?" into numbers I can compare. That's how I found that smaller chunks
+roughly doubled retrieval accuracy.
+
+**5. The UI (`app.py`)**
+
+A small Streamlit page that uses the same functions. One tab asks a question and shows the answer,
+the verification result, the quote and the 3 retrieved chunks. The other tab runs the evaluation
+and shows the scores and a row for every question.
 
 ### Results (15 questions, measured on my machine)
 
