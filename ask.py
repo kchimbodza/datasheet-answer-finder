@@ -39,7 +39,7 @@ def find_quote(quote, hits):
     return None
 
 
-def ask(question, k=3, log=True):
+def ask(question, k=3, log=True, model=CHAT_MODEL):
     start = time.perf_counter()
     hits = retrieve(question, k)
     retrieval_ms = (time.perf_counter() - start) * 1000
@@ -47,7 +47,7 @@ def ask(question, k=3, log=True):
     pages = "\n\n".join(f"[{h['source']} p.{h['page']}]\n{h['text']}" for h in hits)
     start = time.perf_counter()
     response = ollama.chat(
-        model=CHAT_MODEL,
+        model=model,
         messages=[{"role": "user", "content": PROMPT.format(pages=pages, question=question)}],
         format="json",
         options={"temperature": 0},
@@ -58,14 +58,15 @@ def ask(question, k=3, log=True):
     answer, quote = str(reply.get("answer", "")), str(reply.get("quote", ""))
     result = {"answer": answer, "quote": quote, "source": find_quote(quote, hits), "hits": hits}
     if log:
-        log_query(question, result, retrieval_ms, llm_ms)
+        log_query(question, result, retrieval_ms, llm_ms, model)
     return result
 
 
-def log_query(question, result, retrieval_ms, llm_ms):
+def log_query(question, result, retrieval_ms, llm_ms, model=CHAT_MODEL):
     """Observability: append one JSON line per question so usage can be reviewed later."""
     record = {
         "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "model": model,
         "question": question,
         "answer": result["answer"],
         "quote": result["quote"],
