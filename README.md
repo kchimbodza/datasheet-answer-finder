@@ -2,15 +2,17 @@
 
 Ask a plain question about a hardware datasheet (ESP32, a router and network switches) and get an answer with the exact page excerpt it came from, plus a score showing how often it finds the right page on a small question set.
 
-![Asking a question: the answer, the verified quote and the retrieved chunks](docs/ask-verified.png)
+![Ask page: a verified answer with its quote and page, and a "not found" answer marked not verified](docs/app-ask.png)
 
-| When the answer is not in the retrieved text | Evaluation on 15 test questions |
+| Evaluation on 15 test questions | Query log (observability) |
 |---|---|
-| ![Not verified](docs/ask-not-verified.png) | ![Evaluation tab](docs/evaluation.png) |
+| ![Evaluation page](docs/app-evaluation.png) | ![Logs page](docs/app-logs.png) |
 
 ## Why I built this
 
-I wanted hands-on practice with **Python**, so I built a small, complete tool with it in about an hour.
+I wanted hands-on practice with **RAG / vector search** and **LLM evaluation and observability**: not just getting
+an LLM to answer, but measuring how often it finds the right source, checking that its quotes are real,
+and logging every question so problems can be found later.
 
 ## How to run it
 
@@ -26,21 +28,19 @@ ollama pull llama3.2           # writes the answers
 
 # Put the datasheet PDFs in data/ (they are not in this repo, see below)
 python ingest.py               # splits pages into chunks, embeds them, stores them in chroma_db/
-streamlit run app.py           # web UI: ask questions and run the evaluation
-python ask.py "How much current does the ESP32 draw when transmitting 802.11b at full power?"
+streamlit run app.py           # web UI: ask, evaluate, and review the query log
+python ask.py "How much does the Route10 weigh?"
 python evaluate.py             # retrieval score on the 15 test questions
 python evaluate.py --answers   # also scores the LLM answers (slower)
-python -m pytest               # tests for the excerpt check
+python -m pytest               # tests for the excerpt check and the logging
 ```
 
 Example output:
 
 ```
-Answer: 240 mA
-Quote:  "T able 5-4. Current Consumption Depending on RF Modes
-Work Mode Min T yp Max Unit
-T ransmit 802.11b, DSSS 1 Mbps, POUT = +19.5 dBm — 240 — mA"
-Verified: quote found on esp32_datasheet_en.pdf page 52
+Answer: 0.46 kg
+Quote:  "Weight 0.46 kg (1.01 lbs)"
+Verified: quote found on Route10_Datasheet.pdf page 4
 ```
 
 ### Datasheets used
@@ -90,7 +90,8 @@ for word as the quote, and where it came from. If the answer isn't there, it sho
 
 LLMs can make things up, so I don't trust the quote just because the model gave one. My
 **excerpt check** looks for the quote inside the chunks that were actually retrieved (ignoring
-upper/lower case and extra spaces). If it's there, the answer is shown as verified with its file
+upper/lower case and all spaces and line breaks, because PDFs often break a line in the middle of
+a word like "pull-up"). If it's there, the answer is shown as verified with its file
 and page. If not, it's marked **NOT VERIFIED**. This catches invented or reworded quotes. It
 can't tell whether a real quote actually answers the question; the failures below show this.
 
@@ -108,11 +109,29 @@ The script asks every question and counts:
 This turns "does it work?" into numbers I can compare. That's how I found that smaller chunks
 roughly doubled retrieval accuracy.
 
-**5. The UI (`app.py`)**
+**5. Logging every question (`ask.py`, observability)**
 
-A small Streamlit page that uses the same functions. One tab asks a question and shows the answer,
-the verification result, the quote and the 3 retrieved chunks. The other tab runs the evaluation
-and shows the scores and a row for every question.
+Evaluation only covers my 15 test questions. To see how the tool behaves on *any* question,
+`ask.py` appends one line of JSON to `logs/queries.jsonl` every time a question is asked. Each line
+holds the time, the question, the answer, the quote, whether it was verified, whether it was
+"not found", the 3 retrieved chunks with their distances, and how long retrieval and the LLM call
+took. Evaluation runs are left out so the log only shows real use. The log stays on my machine
+(it is in `.gitignore`).
+
+**6. The UI (`app.py`)**
+
+A small Streamlit app that uses the same functions, with three pages in the sidebar:
+
+- **Ask**: a chat. Each answer is a card with a green "Verified" or red "Not verified" badge, the
+  quote, and the retrieved chunks in a collapsible "Sources" section.
+- **Evaluation**: runs the 15 test questions and shows hit@1, hit@3, good answers and a row per
+  question.
+- **Logs**: reads the query log and shows how many answers were verified or "not found", the
+  average time for retrieval and for the LLM, and every recent question.
+
+The colours are in `.streamlit/config.toml` and the card and badge styles are in `style.css`.
+Text from the LLM or the PDFs is HTML-escaped before it is shown, so it can never run as code on
+the page.
 
 ### Results (15 questions, measured on my machine)
 
@@ -120,10 +139,14 @@ and shows the scores and a row for every question.
 |---|---|---|
 | Right page ranked 1st (hit@1) | 3/15 (20%) | 7/15 (47%) |
 | Right page in top 3 (hit@3) | 6/15 (40%) | 11/15 (73%) |
-| Answer correct **and** quote verified | 5/15 (33%) | 8/15 (53%) |
+| Answer correct **and** quote verified | 5/15 (33%) | 7–8/15 (47–53%)* |
 
 With whole pages, short prose pages (overview, feature lists) kept beating the dense spec
 tables that hold the actual numbers. Smaller chunks fixed much of that.
+
+\* Retrieval scores were the same on every run. The answer score was 8/15 on three runs and 7/15
+on later runs, with the same code, model and retrieved chunks. The one question that changed was
+the ESP32 802.11b transmit current: the model first answered "240 mA", later "not found".
 
 ### What I learned from the failures
 
@@ -134,16 +157,20 @@ tables that hold the actual numbers. Smaller chunks fixed much of that.
 - **A page-level hit is not always enough.** For the ESP32 deep-sleep question, a chunk from the
   right page (30) came first, but it was the prose part of the page, not the table row with
   "10 µA", so the model correctly said "not found".
-- A verified quote can still be a non-answer. Asked for the Route10's retail price (not in the
-  datasheet), the model answered "Disruptively priced" with a real quote from page 2
-  ([screenshot](docs/ask-quote-but-no-answer.png)).
+- **The same question can get a different answer on a different run**, even with temperature 0
+  (see the note under the results). One evaluation run is not enough to trust an LLM score.
+- **The query log showed that "verified" overstates correctness.** In the 10 logged questions in
+  the screenshot, 8 were verified, but at least 3 of those 8 are wrong or not real answers:
+  "160 MHz" for the ESP32 CPU speed (the datasheet says up to 240 MHz; 160 MHz is for one variant),
+  "4 Devices" for the Route10's MAC table size (it is 4k; the quote came from screenshot text in the
+  PDF), and "Disruptively priced" for the Route10's price (the price is not in the datasheet).
 - One ESP32 page (69, a large pin table) is longer than the embedding model's 2048-token limit,
   so the end of it is cut off before embedding.
 - pypdf reads the ESP32 PDF's minus sign as "⚶", so `ingest.py` replaces it with "-".
 
 ## Built with
 
-Python, Ollama, Chroma
+Python, Ollama, Chroma, Streamlit
 
 Built with help from an AI coding assistant (Claude Code). I planned, reviewed and tested every part.
 
