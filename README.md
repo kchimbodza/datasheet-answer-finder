@@ -9,7 +9,7 @@ Ask a plain question about a hardware datasheet and get an answer **with the exa
 
 ![Demo: asking questions, running the evaluation and viewing the query log](docs/demo.gif)
 
-<sub>28-second demo · [full-quality MP4](docs/demo.mp4)</sub>
+<sub>26-second demo · [full-quality MP4](docs/demo.mp4)</sub>
 
 ## At a glance
 
@@ -23,7 +23,7 @@ Ask a plain question about a hardware datasheet and get an answer **with the exa
 ## Key results
 
 - **Better retrieval through measurement:** splitting pages into smaller chunks raised how often the right page is found (top 3 results) from **40% to 73%**.
-- **Compared 4 local LLMs on the same test set:** the best, `qwen2.5:7b`, gave correct, verified answers **60%** of the time, compared with 47% for the starting model.
+- **Compared 4 local LLMs on the same test set:** the best, `qwen2.5:7b` (now the default), gave correct, verified answers **60%** of the time, compared with 47% for the starting model.
 - **Logging exposed a blind spot:** "quote verified" does not mean "answer correct". The query log showed real quotes attached to wrong answers, so I added a "verified but wrong" score.
 
 ## Results
@@ -39,8 +39,8 @@ Ask a plain question about a hardware datasheet and get an answer **with the exa
 
 | Model | Size | Correct + verified | Verified but wrong | Time per question |
 |---|---|---|---|---|
-| llama3.2 (default) | 3B | 7/15 (47%) | 3 | ~0.8 s |
-| **qwen2.5:7b** | 7B | **9/15 (60%)** | **1** | ~1.5 s |
+| llama3.2 (first default) | 3B | 7/15 (47%) | 3 | ~0.8 s |
+| **qwen2.5:7b (default)** | 7B | **9/15 (60%)** | **1** | ~1.5 s |
 | gemma3:4b | 4B | 8/15 (53%) | 3 | ~1.9 s |
 | phi4-mini | 3.8B | 8/15 (53%) | 2 | ~1.5 s |
 
@@ -57,7 +57,7 @@ Ask a plain question about a hardware datasheet and get an answer **with the exa
 - **Measure before tuning.** Whole-page chunks let short overview pages beat the dense spec tables that hold the numbers. The test set showed this, and smaller chunks fixed much of it.
 - **A real quote is not a correct answer.** Asked for the 8-port switch's idle power, the model quoted a real line, but it belonged to the 24-port switch.
 - **One run is not enough.** With llama3.2, one question flipped between "240 mA" and "not found" across sessions, with the same code and data.
-- **Logs find what tests miss.** On 10 real questions, 8 answers were "verified", but at least 3 of those were wrong or not real answers (for example "Disruptively priced" for a price question).
+- **Logs find what tests miss.** On 10 real questions answered by llama3.2, 8 answers were "verified", but at least 3 of those were wrong or not real answers (for example "Disruptively priced" for a price question).
 - **A bigger model helps, but retrieval sets the limit.** The right page was in the top 3 for only 11 of 15 questions, so no answer model can reach 15/15 without better retrieval.
 
 <details>
@@ -72,7 +72,7 @@ Every PDF page is read with pypdf and cut into chunks of about 800 characters, a
 The question is embedded the same way, and Chroma returns the 3 closest chunks by cosine distance (0 = very similar). The embedding model expects a label in front of the text, `search_document:` for chunks and `search_query:` for questions.
 
 **3. Answering with a checkable quote (`ask.py`)**
-The 3 chunks and the question go to a local LLM (default `llama3.2`). The prompt requires JSON with an answer and a word-for-word quote, or "not found". The **excerpt check** then looks for that quote in the retrieved chunks, ignoring case, spaces and line breaks (PDFs often break a word like "pull-up" across lines). If it's there, the answer is **verified** with its file and page. Otherwise it's marked **not verified**.
+The 3 chunks and the question go to a local LLM (default `qwen2.5:7b`, chosen by the model comparison). The prompt requires JSON with an answer and a word-for-word quote, or "not found". The **excerpt check** then looks for that quote in the retrieved chunks, ignoring case, spaces and line breaks (PDFs often break a word like "pull-up" across lines). If it's there, the answer is **verified** with its file and page. Otherwise it's marked **not verified**.
 
 **4. Measuring it (`evaluate.py`, `questions.json`)**
 15 test questions, each with the page(s) that hold the answer and a short text the correct answer must contain. The script reports:
@@ -105,21 +105,21 @@ pip install -r requirements.txt
 
 # Needs Ollama running locally:
 ollama pull nomic-embed-text   # embeddings
-ollama pull llama3.2           # answers (default model)
+ollama pull qwen2.5:7b         # answers (default model, ~4.7 GB)
 
 # Put the datasheet PDFs in data/ (see below), then:
 python ingest.py                                   # build the index
 streamlit run app.py                               # web UI
 python ask.py "How much does the Route10 weigh?"   # one question from the terminal
 python evaluate.py --answers                       # score the 15 test questions
-python evaluate.py --answers --model qwen2.5:7b    # same test, different model
+python evaluate.py --answers --model llama3.2      # same test, a different model
 python -m pytest                                   # tests
 ```
 
 Example output:
 
 ```
-Answer: 0.46 kg
+Answer: 0.46 kg (1.01 lbs)
 Quote:  "Weight 0.46 kg (1.01 lbs)"
 Verified: quote found on Route10_Datasheet.pdf page 4
 ```

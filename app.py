@@ -142,6 +142,8 @@ else:
         rows = [
             {
                 "time": r["time"][:16].replace("T", " "),  # e.g. 2026-11-07 22:31 (UTC)
+                # entries logged before the model field was added all came from llama3.2
+                "model": r.get("model", "llama3.2"),
                 "question": r["question"],
                 "answer": r["answer"],
                 "verified": r["verified"],

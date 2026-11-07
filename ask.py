@@ -9,7 +9,7 @@ import ollama
 
 from search import retrieve
 
-CHAT_MODEL = "llama3.2"
+CHAT_MODEL = "qwen2.5:7b"  # best of 4 models tested (see README)
 LOG_PATH = Path("logs/queries.jsonl")
 
 PROMPT = """Answer the question using ONLY the datasheet pages below.
