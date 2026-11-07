@@ -1,20 +1,101 @@
 # Datasheet Answer Finder
 
-Ask a plain question about a hardware datasheet (ESP32, a router and network switches) and get an answer with the exact page excerpt it came from, plus a score showing how often it finds the right page on a small question set.
+Ask a plain question about a hardware datasheet and get an answer **with the exact quote and page it came from**. Every quote is checked, every question is logged, and the system is scored on a 15-question test set.
 
-![Ask page: a verified answer with its quote and page, and a "not found" answer marked not verified](docs/app-ask.png)
+![Python](https://img.shields.io/badge/Python-3776AB?logo=python&logoColor=white)
+![Ollama](https://img.shields.io/badge/Ollama-local%20LLMs-000000)
+![Chroma](https://img.shields.io/badge/Chroma-vector%20DB-4F46E5)
+![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)
 
-| Evaluation on 15 test questions | Query log (observability) |
+![Demo: asking questions, running the evaluation and viewing the query log](docs/demo.gif)
+
+<sub>28-second demo · [full-quality MP4](docs/demo.mp4)</sub>
+
+## At a glance
+
+| | |
 |---|---|
-| ![Evaluation page](docs/app-evaluation.png) | ![Logs page](docs/app-logs.png) |
+| **What it does** | Answers questions about long hardware datasheets (ESP32, a router, network switches) and shows the exact quote and page number for each answer |
+| **Skills shown** | RAG (retrieval-augmented generation), vector search, embeddings, LLM evaluation, LLM observability |
+| **Tech** | Python, Ollama (local LLMs), Chroma (vector database), Streamlit (web UI) |
+| **Runs** | Fully on a laptop. No cloud services or API keys |
 
-## Why I built this
+## Key results
 
-I wanted hands-on practice with **RAG / vector search** and **LLM evaluation and observability**: not just getting
-an LLM to answer, but measuring how often it finds the right source, checking that its quotes are real,
-and logging every question so problems can be found later.
+- **Better retrieval through measurement:** splitting pages into smaller chunks raised how often the right page is found (top 3 results) from **40% to 73%**.
+- **Compared 4 local LLMs on the same test set:** the best, `qwen2.5:7b`, gave correct, verified answers **60%** of the time, compared with 47% for the starting model.
+- **Logging exposed a blind spot:** "quote verified" does not mean "answer correct". The query log showed real quotes attached to wrong answers, so I added a "verified but wrong" score.
 
-## How to run it
+## Results
+
+**Retrieval: does it find the right page?** (15 test questions)
+
+| Chunking | Right page ranked 1st | Right page in top 3 |
+|---|---|---|
+| One chunk per page | 3/15 (20%) | 6/15 (40%) |
+| ~800-character chunks (current) | **7/15 (47%)** | **11/15 (73%)** |
+
+**Answer models: are the answers correct?** (same retrieval for every model; each model run twice with identical scores)
+
+| Model | Size | Correct + verified | Verified but wrong | Time per question |
+|---|---|---|---|---|
+| llama3.2 (default) | 3B | 7/15 (47%) | 3 | ~0.8 s |
+| **qwen2.5:7b** | 7B | **9/15 (60%)** | **1** | ~1.5 s |
+| gemma3:4b | 4B | 8/15 (53%) | 3 | ~1.9 s |
+| phi4-mini | 3.8B | 8/15 (53%) | 2 | ~1.5 s |
+
+<sub>Measured on an RTX 4050 laptop GPU (6 GB). "Verified but wrong" = the quote really is in the datasheet, but the answer is wrong.</sub>
+
+## Screenshots
+
+| Ask | Evaluation | Query log |
+|---|---|---|
+| ![Ask page](docs/app-ask.png) | ![Evaluation page](docs/app-evaluation.png) | ![Logs page](docs/app-logs.png) |
+
+## What I learned
+
+- **Measure before tuning.** Whole-page chunks let short overview pages beat the dense spec tables that hold the numbers. The test set showed this, and smaller chunks fixed much of it.
+- **A real quote is not a correct answer.** Asked for the 8-port switch's idle power, the model quoted a real line, but it belonged to the 24-port switch.
+- **One run is not enough.** With llama3.2, one question flipped between "240 mA" and "not found" across sessions, with the same code and data.
+- **Logs find what tests miss.** On 10 real questions, 8 answers were "verified", but at least 3 of those were wrong or not real answers (for example "Disruptively priced" for a price question).
+- **A bigger model helps, but retrieval sets the limit.** The right page was in the top 3 for only 11 of 15 questions, so no answer model can reach 15/15 without better retrieval.
+
+<details>
+<summary><b>How it works (technical details)</b></summary>
+
+The tool has two halves. First it builds a searchable index of the datasheets once. Then, for every question, it finds the most relevant text and asks a local LLM to answer from that text only, with a quote that can be checked.
+
+**1. Building the index (`ingest.py`)**
+Every PDF page is read with pypdf and cut into chunks of about 800 characters, always breaking between lines. Each chunk remembers its file and page. The `nomic-embed-text` model (in Ollama) turns each chunk into an **embedding**, a list of numbers that represents its meaning. The file name is added in front of each chunk first, so spec tables that never name the product are still linked to it. Everything is stored in Chroma, in the `chroma_db/` folder.
+
+**2. Finding the right text (`search.py`)**
+The question is embedded the same way, and Chroma returns the 3 closest chunks by cosine distance (0 = very similar). The embedding model expects a label in front of the text, `search_document:` for chunks and `search_query:` for questions.
+
+**3. Answering with a checkable quote (`ask.py`)**
+The 3 chunks and the question go to a local LLM (default `llama3.2`). The prompt requires JSON with an answer and a word-for-word quote, or "not found". The **excerpt check** then looks for that quote in the retrieved chunks, ignoring case, spaces and line breaks (PDFs often break a word like "pull-up" across lines). If it's there, the answer is **verified** with its file and page. Otherwise it's marked **not verified**.
+
+**4. Measuring it (`evaluate.py`, `questions.json`)**
+15 test questions, each with the page(s) that hold the answer and a short text the correct answer must contain. The script reports:
+- **hit@1 / hit@3**: a chunk from a right page came 1st / was in the top 3
+- **good answer**: the answer contains the expected text *and* the quote is verified
+- **verified but wrong**: the quote is real but the answer is wrong
+
+`--model` runs the same test with a different answer model.
+
+**5. Logging every question (`ask.py`)**
+Each question appends one JSON line to `logs/queries.jsonl` with the model, question, answer, quote, verified / not-found flags, the retrieved chunks and their distances, and the retrieval and LLM times. Test runs are excluded, and the log stays local (it's in `.gitignore`).
+
+**6. The UI (`app.py`)**
+A Streamlit app with three pages: **Ask** (chat with verified/not-verified badges and sources), **Evaluation** (runs the test set) and **Logs** (verified rate, not-found rate, timings, recent questions). Colours are in `.streamlit/config.toml` and styles in `style.css`. LLM and PDF text is HTML-escaped before it's shown.
+
+**Known limits**
+- One ESP32 page (69, a large pin table) is longer than the embedding model's 2048-token limit, so its end is cut off.
+- pypdf reads the ESP32 PDF's minus sign as "⚶"; `ingest.py` replaces it with "-".
+
+</details>
+
+<details>
+<summary><b>Run it yourself</b></summary>
 
 ```bash
 git clone https://github.com/kchimbodza/datasheet-answer-finder.git
@@ -22,17 +103,17 @@ cd datasheet-answer-finder
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Needs Ollama running locally with these two models:
-ollama pull nomic-embed-text   # makes the embeddings
-ollama pull llama3.2           # writes the answers
+# Needs Ollama running locally:
+ollama pull nomic-embed-text   # embeddings
+ollama pull llama3.2           # answers (default model)
 
-# Put the datasheet PDFs in data/ (they are not in this repo, see below)
-python ingest.py               # splits pages into chunks, embeds them, stores them in chroma_db/
-streamlit run app.py           # web UI: ask, evaluate, and review the query log
-python ask.py "How much does the Route10 weigh?"
-python evaluate.py             # retrieval score on the 15 test questions
-python evaluate.py --answers   # also scores the LLM answers (slower)
-python -m pytest               # tests for the excerpt check and the logging
+# Put the datasheet PDFs in data/ (see below), then:
+python ingest.py                                   # build the index
+streamlit run app.py                               # web UI
+python ask.py "How much does the Route10 weigh?"   # one question from the terminal
+python evaluate.py --answers                       # score the 15 test questions
+python evaluate.py --answers --model qwen2.5:7b    # same test, different model
+python -m pytest                                   # tests
 ```
 
 Example output:
@@ -43,136 +124,15 @@ Quote:  "Weight 0.46 kg (1.01 lbs)"
 Verified: quote found on Route10_Datasheet.pdf page 4
 ```
 
-### Datasheets used
+**Datasheets used** (not in the repo because they belong to their manufacturers; download into `data/`):
+- `esp32_datasheet_en.pdf`: ESP32 Series Datasheet v5.3 (78 pages), from https://www.espressif.com/documentation/esp32_datasheet_en.pdf
+- `Route10_Datasheet.pdf` (5 pages) and `Alta_Labs_Switches_Datasheet.pdf` (8 pages), from https://www.alta.inc
 
-The PDFs are not committed because they belong to their manufacturers. Download them into `data/`:
-
-- `esp32_datasheet_en.pdf`: ESP32 Series Datasheet v5.3 (78 pages), from
-  https://www.espressif.com/documentation/esp32_datasheet_en.pdf
-- `Route10_Datasheet.pdf` (5 pages) and `Alta_Labs_Switches_Datasheet.pdf` (8 pages), from
-  https://www.alta.inc
-
-## How it works
-
-The tool has two halves. First it builds a searchable index of the datasheets once. Then, for
-every question, it finds the most relevant text and asks a local LLM to answer from that text
-only, with a quote I can check.
-
-**1. Building the index (`ingest.py`)**
-
-I read every PDF in `data/` page by page with pypdf. A whole datasheet page often covers several
-topics (a power table, some notes, part of the next section), so I cut each page into smaller
-chunks of about 800 characters, always breaking between lines. Each chunk remembers which file
-and page it came from, because the page number is what the user sees as the source and what the
-evaluation checks.
-
-Next I turn each chunk into an **embedding**: a list of numbers that represents what the text is
-about, so texts with similar meaning end up with similar numbers. I use the free
-`nomic-embed-text` model running locally in Ollama. Before embedding, I add the file name to the
-front of the chunk. Spec tables often never mention the product name, so this links them to the
-right product. Everything is stored in Chroma, a vector database that saves to the `chroma_db/`
-folder.
-
-**2. Finding the right text (`search.py`)**
-
-When a question comes in, I embed it with the same model and ask Chroma for the 3 chunks whose
-embeddings are closest to it. "Closest" is measured with cosine distance: 0 means pointing in the
-same direction (very similar), and bigger numbers mean less similar. The embedding model expects
-a small label in front of the text, `search_document:` for stored chunks and `search_query:` for
-questions, so I add those.
-
-**3. Answering with a quote I can check (`ask.py`)**
-
-I send those 3 chunks and the question to `llama3.2`, also running locally in Ollama. The prompt
-says to answer only from those chunks and to reply in JSON with an answer, a sentence copied word
-for word as the quote, and where it came from. If the answer isn't there, it should say
-"not found".
-
-LLMs can make things up, so I don't trust the quote just because the model gave one. My
-**excerpt check** looks for the quote inside the chunks that were actually retrieved (ignoring
-upper/lower case and all spaces and line breaks, because PDFs often break a line in the middle of
-a word like "pull-up"). If it's there, the answer is shown as verified with its file
-and page. If not, it's marked **NOT VERIFIED**. This catches invented or reworded quotes. It
-can't tell whether a real quote actually answers the question; the failures below show this.
-
-**4. Measuring it (`evaluate.py` and `questions.json`)**
-
-I wrote 15 test questions. For each one I looked up which page(s) of the datasheet print the
-answer, plus a short piece of text the right answer must contain (for example "240" for 240 mA).
-The script asks every question and counts:
-
-- **hit@1**: the top chunk came from a right page.
-- **hit@3**: a chunk from a right page was anywhere in the top 3.
-- **good answer** (with `--answers`): the LLM's answer contains the expected text **and** its
-  quote passed the excerpt check.
-
-This turns "does it work?" into numbers I can compare. That's how I found that smaller chunks
-roughly doubled retrieval accuracy.
-
-**5. Logging every question (`ask.py`, observability)**
-
-Evaluation only covers my 15 test questions. To see how the tool behaves on *any* question,
-`ask.py` appends one line of JSON to `logs/queries.jsonl` every time a question is asked. Each line
-holds the time, the question, the answer, the quote, whether it was verified, whether it was
-"not found", the 3 retrieved chunks with their distances, and how long retrieval and the LLM call
-took. Evaluation runs are left out so the log only shows real use. The log stays on my machine
-(it is in `.gitignore`).
-
-**6. The UI (`app.py`)**
-
-A small Streamlit app that uses the same functions, with three pages in the sidebar:
-
-- **Ask**: a chat. Each answer is a card with a green "Verified" or red "Not verified" badge, the
-  quote, and the retrieved chunks in a collapsible "Sources" section.
-- **Evaluation**: runs the 15 test questions and shows hit@1, hit@3, good answers and a row per
-  question.
-- **Logs**: reads the query log and shows how many answers were verified or "not found", the
-  average time for retrieval and for the LLM, and every recent question.
-
-The colours are in `.streamlit/config.toml` and the card and badge styles are in `style.css`.
-Text from the LLM or the PDFs is HTML-escaped before it is shown, so it can never run as code on
-the page.
-
-### Results (15 questions, measured on my machine)
-
-| Measure | One chunk per page | ~800-character chunks (current) |
-|---|---|---|
-| Right page ranked 1st (hit@1) | 3/15 (20%) | 7/15 (47%) |
-| Right page in top 3 (hit@3) | 6/15 (40%) | 11/15 (73%) |
-| Answer correct **and** quote verified | 5/15 (33%) | 7–8/15 (47–53%)* |
-
-With whole pages, short prose pages (overview, feature lists) kept beating the dense spec
-tables that hold the actual numbers. Smaller chunks fixed much of that.
-
-\* Retrieval scores were the same on every run. The answer score was 8/15 on three runs and 7/15
-on later runs, with the same code, model and retrieved chunks. The one question that changed was
-the ESP32 802.11b transmit current: the model first answered "240 mA", later "not found".
-
-### What I learned from the failures
-
-- **The quote check proves a quote exists, not that it answers the question.** Asked for the
-  idle power of the 8-port switch, the model answered "15 Watts" with a real, verified quote,
-  but it came from the 24-port switch's spec page. Splitting the page had cut the table rows away
-  from the header that says which switch they belong to.
-- **A page-level hit is not always enough.** For the ESP32 deep-sleep question, a chunk from the
-  right page (30) came first, but it was the prose part of the page, not the table row with
-  "10 µA", so the model correctly said "not found".
-- **The same question can get a different answer on a different run**, even with temperature 0
-  (see the note under the results). One evaluation run is not enough to trust an LLM score.
-- **The query log showed that "verified" overstates correctness.** In the 10 logged questions in
-  the screenshot, 8 were verified, but at least 3 of those 8 are wrong or not real answers:
-  "160 MHz" for the ESP32 CPU speed (the datasheet says up to 240 MHz; 160 MHz is for one variant),
-  "4 Devices" for the Route10's MAC table size (it is 4k; the quote came from screenshot text in the
-  PDF), and "Disruptively priced" for the Route10's price (the price is not in the datasheet).
-- One ESP32 page (69, a large pin table) is longer than the embedding model's 2048-token limit,
-  so the end of it is cut off before embedding.
-- pypdf reads the ESP32 PDF's minus sign as "⚶", so `ingest.py` replaces it with "-".
+</details>
 
 ## Built with
 
-Python, Ollama, Chroma, Streamlit
-
-Built with help from an AI coding assistant (Claude Code). I planned, reviewed and tested every part.
+Python, Ollama, Chroma, Streamlit. Built with help from an AI coding assistant (Claude Code). I planned, reviewed and tested every part.
 
 ## Author
 
