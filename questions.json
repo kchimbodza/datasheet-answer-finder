@@ -1,0 +1,17 @@
+[
+  {"question": "How much current does the ESP32 use in deep sleep with the RTC timer running?", "source": "esp32_datasheet_en.pdf", "pages": [5, 30], "answer_contains": "10"},
+  {"question": "How much current does the ESP32 draw in light sleep?", "source": "esp32_datasheet_en.pdf", "pages": [30], "answer_contains": "0.8"},
+  {"question": "Which strapping pins select the ESP32 boot mode?", "source": "esp32_datasheet_en.pdf", "pages": [22, 23], "answer_contains": "GPIO0"},
+  {"question": "What is the absolute maximum supply voltage for the ESP32?", "source": "esp32_datasheet_en.pdf", "pages": [51], "answer_contains": "3.6"},
+  {"question": "What is the highest operating temperature for ESP32 chips without in-package flash?", "source": "esp32_datasheet_en.pdf", "pages": [51], "answer_contains": "125"},
+  {"question": "How much current does the ESP32 draw when transmitting 802.11b at full power?", "source": "esp32_datasheet_en.pdf", "pages": [52], "answer_contains": "240"},
+  {"question": "How much current can one ESP32 GPIO pin sink?", "source": "esp32_datasheet_en.pdf", "pages": [52], "answer_contains": "28"},
+  {"question": "How much external flash memory can the ESP32 map?", "source": "esp32_datasheet_en.pdf", "pages": [27], "answer_contains": "16"},
+  {"question": "Which Bluetooth version does the ESP32 support?", "source": "esp32_datasheet_en.pdf", "pages": [3], "answer_contains": "4.2"},
+  {"question": "What is the PoE power budget of the Route10 router?", "source": "Route10_Datasheet.pdf", "pages": [4], "answer_contains": "40"},
+  {"question": "What is the maximum operating temperature of the Route10?", "source": "Route10_Datasheet.pdf", "pages": [5], "answer_contains": "50"},
+  {"question": "What total throughput can the Route10 router handle?", "source": "Route10_Datasheet.pdf", "pages": [5], "answer_contains": "25"},
+  {"question": "What is the PoE budget of the S24-PoE switch?", "source": "Alta_Labs_Switches_Datasheet.pdf", "pages": [1, 2, 7], "answer_contains": "240"},
+  {"question": "How much power does the 8-port Alta Labs switch use when idle?", "source": "Alta_Labs_Switches_Datasheet.pdf", "pages": [5], "answer_contains": "3.4"},
+  {"question": "What is the switching capacity of the 16-port Alta Labs switch?", "source": "Alta_Labs_Switches_Datasheet.pdf", "pages": [6], "answer_contains": "36"}
+]
