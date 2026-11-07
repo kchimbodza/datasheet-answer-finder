@@ -1,0 +1,42 @@
+/* Visual styling for app.py. Colours match .streamlit/config.toml. */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap");
+
+/* Set the font high up only; icons keep their own icon font. */
+html, body, .stApp { font-family: "Inter", sans-serif; }
+.block-container { max-width: 1180px; padding-top: 2.5rem; }
+h1, h2, h3 { letter-spacing: -0.02em; }
+
+/* Sidebar */
+section[data-testid="stSidebar"] { border-right: 1px solid #E2E8F0; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.15rem; }
+.brand-icon {
+  width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center;
+  background: linear-gradient(135deg, #6366F1, #4F46E5); color: white; font-size: 1.05rem;
+}
+.side-label { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.06em; color: #64748B; text-transform: uppercase; margin: 6px 0; }
+.doc { display: flex; gap: 8px; font-size: 0.82rem; padding: 5px 0; color: #334155; }
+.doc span:first-child { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.doc span:last-child { color: #94A3B8; white-space: nowrap; }
+
+/* Page header */
+.page-title { font-size: 2rem !important; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0 !important; }
+.page-sub { color: #64748B; margin-top: 2px; margin-bottom: 1.2rem; }
+
+/* Answer card */
+.answer-card { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 18px 20px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+.answer-text { font-size: 1.35rem; font-weight: 600; margin-bottom: 10px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; font-weight: 600; padding: 4px 10px; border-radius: 999px; }
+.badge.ok { background: #ECFDF5; color: #047857; }
+.badge.bad { background: #FEF2F2; color: #B91C1C; }
+.quote { margin: 14px 0 0; padding: 10px 14px; border-left: 3px solid #6366F1; background: #F8FAFC; border-radius: 0 8px 8px 0; color: #334155; font-size: 0.92rem; white-space: pre-wrap; }
+.source-head { font-size: 0.85rem; font-weight: 600; color: #334155; }
+.source-head span { color: #94A3B8; font-weight: 500; }
+
+/* Metric cards */
+div[data-testid="stMetric"] { background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; padding: 14px 18px; }
+div[data-testid="stMetricLabel"] p { color: #64748B; font-weight: 500; }
+
+/* Rounded tables and buttons */
+div[data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
+.stButton > button { border-radius: 10px; text-align: left; }
+.stButton > button p { white-space: normal; }
