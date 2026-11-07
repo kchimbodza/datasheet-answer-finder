@@ -1,0 +1,20 @@
+# Job Hunter planning files (kept local)
+TASKS.md
+CLAUDE.md
+.claude/
+.jobhunter.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.env
+# Node
+node_modules/
+dist/
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+chroma_db/
+data/
