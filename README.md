@@ -35,6 +35,16 @@ Ask a plain question about a hardware datasheet and get an answer **with the exa
 3. **Answer:** a local LLM must answer from those chunks only, with a word-for-word quote, or say "not found".
 4. **Verify:** the quote is searched for in the chunks. Found → answer shown with file and page. Not found → marked not verified.
 
+**Why this architecture**
+
+| Choice | Why |
+|---|---|
+| Local models (Ollama) | No API keys or cloud; datasheets stay on the laptop; free to run the test set many times. |
+| Chroma | A vector database that runs inside the app, with no server to set up. |
+| ~800-character chunks | Measured: the right page in the top 3 went from 40% (whole pages) to 73%. |
+| A quote that is checked | An LLM answer cannot be trusted alone; a word-for-word quote can be checked by plain code and shown with its page. |
+| Streamlit | The quickest way to build a usable UI for a one-person tool. |
+
 ## Results
 
 **Retrieval: does it find the right page?** (15 test questions)
