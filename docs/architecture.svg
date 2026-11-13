@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 340" width="960" height="340" role="img" aria-labelledby="t d">
+  <title id="t">How Datasheet Answer Finder works</title>
+  <desc id="d">Once: PDFs are read page by page, cut into 800-character chunks, embedded with nomic-embed-text and stored in Chroma. Every question: the question is embedded, Chroma returns the 3 closest chunks, qwen2.5:7b answers with a word-for-word quote, the quote is checked against the chunks, and the answer is shown with its file and page, or marked not verified. Every question is logged.</desc>
+  <style>
+    :root { --ink:#1f2937; --sub:#57606a; --line:#d0d7de; --card:#ffffff; --on:#4f46e5; --tint:#eef2ff; --ok:#1a7f37; --bad:#cf222e; }
+    @media (prefers-color-scheme: dark) {
+      :root { --ink:#e6edf3; --sub:#9198a1; --line:#3d444d; --card:#161b22; --on:#818cf8; --tint:#1e1b4b; --ok:#3fb950; --bad:#f85149; }
+    }
+    text { font-family: Inter, "Segoe UI", system-ui, -apple-system, Helvetica, Arial, sans-serif; }
+    .lane  { font-size:12px; font-weight:700; fill:var(--sub); letter-spacing:.06em; }
+    .title { font-size:13.5px; font-weight:700; fill:var(--ink); text-anchor:middle; }
+    .sub   { font-size:10.5px; fill:var(--sub); text-anchor:middle; }
+    .ok    { font-size:11px; font-weight:600; fill:var(--ok); text-anchor:middle; }
+    .bad   { font-size:11px; font-weight:600; fill:var(--bad); text-anchor:middle; }
+    .node  { fill:var(--card); stroke:var(--line); stroke-width:1.5; }
+    .db    { fill:var(--tint); stroke:var(--on); stroke-width:1.5; }
+    .wire  { stroke:var(--line); stroke-width:1.5; fill:none; }
+    .link  { stroke:var(--on); stroke-width:1.5; fill:none; stroke-dasharray:4 6; animation: dash 1.2s linear infinite; }
+    @keyframes dash { to { stroke-dashoffset:-20; } }
+    .head  { fill:var(--line); }
+    .dot   { fill:var(--on); }
+    .t1 { animation: g1 6s infinite ease-in-out; }
+    .t2 { animation: g2 7s infinite ease-in-out; }
+    @keyframes g1 {
+      0%,6%   { transform:translateX(95px); }  18%,24% { transform:translateX(287px); }
+      36%,42% { transform:translateX(479px); } 54%,60% { transform:translateX(671px); }
+      72%,100%{ transform:translateX(863px); }
+    }
+    @keyframes g2 {
+      0%,5%   { transform:translateX(87px); }  14%,19% { transform:translateX(243px); }
+      28%,33% { transform:translateX(399px); } 42%,47% { transform:translateX(555px); }
+      56%,61% { transform:translateX(711px); } 70%,100%{ transform:translateX(867px); }
+    }
+    @media (prefers-reduced-motion: reduce) { .t1, .t2, .link { animation:none; } }
+  </style>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path class="head" d="M0 0 L10 5 L0 10z"/></marker>
+  </defs>
+
+  <!-- Lane 1: build the index once -->
+  <text class="lane" x="20" y="26">1 · BUILD THE INDEX ONCE  (ingest.py)</text>
+  <g>
+    <rect class="node" x="20"  y="40" width="150" height="66" rx="10"/>
+    <text class="title" x="95"  y="68">Datasheet PDFs</text><text class="sub" x="95"  y="86">ESP32 · Route10 · switches</text>
+    <rect class="node" x="212" y="40" width="150" height="66" rx="10"/>
+    <text class="title" x="287" y="68">Read pages</text><text class="sub" x="287" y="86">pypdf, keeps file + page</text>
+    <rect class="node" x="404" y="40" width="150" height="66" rx="10"/>
+    <text class="title" x="479" y="68">~800-char chunks</text><text class="sub" x="479" y="86">file name added in front</text>
+    <rect class="node" x="596" y="40" width="150" height="66" rx="10"/>
+    <text class="title" x="671" y="68">Embed</text><text class="sub" x="671" y="86">nomic-embed-text (Ollama)</text>
+    <rect class="db"   x="788" y="40" width="150" height="66" rx="10"/>
+    <text class="title" x="863" y="68">Chroma</text><text class="sub" x="863" y="86">vector database</text>
+    <path class="wire" d="M170 73 H210" marker-end="url(#a)"/>
+    <path class="wire" d="M362 73 H402" marker-end="url(#a)"/>
+    <path class="wire" d="M554 73 H594" marker-end="url(#a)"/>
+    <path class="wire" d="M746 73 H786" marker-end="url(#a)"/>
+    <circle class="dot t1" cx="0" cy="40" r="5"/>
+  </g>
+
+  <!-- shared index link -->
+  <path class="link" d="M863 106 V150 H400 V212"/>
+  <text class="sub" x="630" y="143">cosine search over the same index</text>
+
+  <!-- Lane 2: every question -->
+  <text class="lane" x="20" y="196">2 · EVERY QUESTION  (search.py → ask.py)</text>
+  <g>
+    <rect class="node" x="20"  y="212" width="135" height="70" rx="10"/>
+    <text class="title" x="87.5"  y="240">Question</text><text class="sub" x="87.5"  y="258">"Route10 weight?"</text>
+    <rect class="node" x="176" y="212" width="135" height="70" rx="10"/>
+    <text class="title" x="243.5" y="240">Embed question</text><text class="sub" x="243.5" y="258">same model</text>
+    <rect class="db"   x="332" y="212" width="135" height="70" rx="10"/>
+    <text class="title" x="399.5" y="240">Top 3 chunks</text><text class="sub" x="399.5" y="258">closest by meaning</text>
+    <rect class="node" x="488" y="212" width="135" height="70" rx="10"/>
+    <text class="title" x="555.5" y="240">qwen2.5:7b</text><text class="sub" x="555.5" y="258">answer + exact quote</text>
+    <rect class="node" x="644" y="212" width="135" height="70" rx="10"/>
+    <text class="title" x="711.5" y="240">Quote check</text><text class="sub" x="711.5" y="258">is it in the chunks?</text>
+    <rect class="node" x="800" y="212" width="140" height="70" rx="10"/>
+    <text class="title" x="870" y="236">Answer</text>
+    <text class="ok"  x="870" y="254">✓ verified, file + page</text>
+    <text class="bad" x="870" y="270">✗ not verified</text>
+    <path class="wire" d="M155 247 H174" marker-end="url(#a)"/>
+    <path class="wire" d="M311 247 H330" marker-end="url(#a)"/>
+    <path class="wire" d="M467 247 H486" marker-end="url(#a)"/>
+    <path class="wire" d="M623 247 H642" marker-end="url(#a)"/>
+    <path class="wire" d="M779 247 H798" marker-end="url(#a)"/>
+    <circle class="dot t2" cx="0" cy="212" r="5"/>
+  </g>
+  <text class="sub" x="480" y="316">Every question is logged (logs/queries.jsonl): answer, quote, retrieved chunks, timings. evaluate.py scores it all on 15 test questions.</text>
+</svg>

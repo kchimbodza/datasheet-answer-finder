@@ -43,7 +43,7 @@ def load_questions():
 
 if __name__ == "__main__":
     check_answers = "--answers" in sys.argv
-    # e.g. python evaluate.py --answers --model qwen2.5:7b
+    # e.g. python evaluate.py --answers --model qwen2.5:7b --save
     model = sys.argv[sys.argv.index("--model") + 1] if "--model" in sys.argv else None
     start = time.perf_counter()
     rows = []
@@ -60,3 +60,15 @@ if __name__ == "__main__":
         total = sum(r[key] for r in rows)
         print(f"{key}: {total}/{n} ({total / n:.0%})")
     print(f"average time per question: {(time.perf_counter() - start) / n:.1f} s")
+
+    if "--save" in sys.argv:  # per-question results, e.g. results/qwen2.5:7b.json
+        from pathlib import Path
+
+        name = (model or "retrieval") if check_answers else "retrieval"
+        if check_answers and not model:
+            from ask import CHAT_MODEL
+            name = CHAT_MODEL
+        out = Path("results") / f"{name.replace(':', '-')}.json"
+        out.parent.mkdir(exist_ok=True)
+        out.write_text(json.dumps(rows, indent=1, ensure_ascii=False))
+        print(f"saved {out}")

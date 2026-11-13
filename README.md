@@ -26,6 +26,15 @@ Ask a plain question about a hardware datasheet and get an answer **with the exa
 - **Compared 4 local LLMs on the same test set:** the best, `qwen2.5:7b` (now the default), gave correct, verified answers **60%** of the time, compared with 47% for the starting model.
 - **Logging exposed a blind spot:** "quote verified" does not mean "answer correct". The query log showed real quotes attached to wrong answers, so I added a "verified but wrong" score.
 
+## Architecture
+
+<p align="center"><img src="docs/architecture.svg" width="100%" alt="Build the index once: PDFs, read pages, 800-character chunks, embed, Chroma. Every question: embed, top 3 chunks, qwen2.5:7b answer with quote, quote check, verified answer with file and page or not verified"></p>
+
+1. **Index once:** every PDF page is cut into ~800-character chunks, embedded and stored in Chroma.
+2. **Retrieve:** a question finds its 3 closest chunks.
+3. **Answer:** a local LLM must answer from those chunks only, with a word-for-word quote, or say "not found".
+4. **Verify:** the quote is searched for in the chunks. Found → answer shown with file and page. Not found → marked not verified.
+
 ## Results
 
 **Retrieval: does it find the right page?** (15 test questions)
@@ -46,6 +55,20 @@ Ask a plain question about a hardware datasheet and get an answer **with the exa
 
 <sub>Measured on an RTX 4050 laptop GPU (6 GB). "Verified but wrong" = the quote really is in the datasheet, but the answer is wrong.</sub>
 
+## Passes and failures
+
+Real cases from the test set and the query log:
+
+| | Question | Answer | Why |
+|---|---|---|---|
+| ✅ | How much does the Route10 weigh? | 0.46 kg, quote "Weight 0.46 kg (1.01 lbs)", Route10 p.4 | Right chunk retrieved, quote found word for word. |
+| ❌ verified but wrong | How much power does the 8-port switch use when idle? | Quoted a real line, but it belonged to the 24-port switch | The quote check proves a quote exists, not that it is about the right product. This case led to the "verified but wrong" score. |
+| ❌ verified but wrong | (query log) a price question | "Disruptively priced" | A real marketing line, not an answer. At least 3 of 8 "verified" answers in the log were like this. |
+| ❌ unstable | ESP32 802.11b transmit current at full power? | "240 mA" in one session, "not found" in another (llama3.2) | Same code and data; one run is not enough, so every model is now run twice. |
+| ❌ retrieval miss | 4 of the 15 test questions | Right page not in the top 3 | No answer model can fix this; it caps accuracy at 11/15. |
+
+`python evaluate.py --answers --save` writes every question's answer, quote, pages and pass/fail to `results/<model>.json`.
+
 ## Screenshots
 
 | Ask | Evaluation | Query log |
@@ -61,9 +84,7 @@ Ask a plain question about a hardware datasheet and get an answer **with the exa
 - **A bigger model helps, but retrieval sets the limit.** The right page was in the top 3 for only 11 of 15 questions, so no answer model can reach 15/15 without better retrieval.
 
 <details>
-<summary><b>How it works (technical details)</b></summary>
-
-The tool has two halves. First it builds a searchable index of the datasheets once. Then, for every question, it finds the most relevant text and asks a local LLM to answer from that text only, with a quote that can be checked.
+<summary><b>Technical details</b></summary>
 
 **1. Building the index (`ingest.py`)**
 Every PDF page is read with pypdf and cut into chunks of about 800 characters, always breaking between lines. Each chunk remembers its file and page. The `nomic-embed-text` model (in Ollama) turns each chunk into an **embedding**, a list of numbers that represents its meaning. The file name is added in front of each chunk first, so spec tables that never name the product are still linked to it. Everything is stored in Chroma, in the `chroma_db/` folder.
@@ -111,7 +132,7 @@ ollama pull qwen2.5:7b         # answers (default model, ~4.7 GB)
 python ingest.py                                   # build the index
 streamlit run app.py                               # web UI
 python ask.py "How much does the Route10 weigh?"   # one question from the terminal
-python evaluate.py --answers                       # score the 15 test questions
+python evaluate.py --answers --save                # score the 15 test questions, save results/
 python evaluate.py --answers --model llama3.2      # same test, a different model
 python -m pytest                                   # tests
 ```
